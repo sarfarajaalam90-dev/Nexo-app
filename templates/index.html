@@ -88,6 +88,20 @@ svg{display:block}
 .btn-login:active{transform:scale(.97);box-shadow:0 4px 12px rgba(37,99,235,.4)}
 .login-demo{margin-top:20px;text-align:center;font-size:12px;color:rgba(255,255,255,.35);line-height:1.8}
 .login-demo span{color:rgba(255,255,255,.55);font-weight:600}
+/* ── Sign Up Screen ─────────────────────────────────────── */
+#signup-screen{
+  position:absolute;inset:0;z-index:101;
+  background:linear-gradient(160deg,#0F172A 0%,#1E3A8A 60%,#1D4ED8 100%);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  padding:32px 28px;gap:0;overflow-y:auto;
+}
+#signup-error{font-size:13px;color:#FCA5A5;margin-bottom:12px;display:none;padding:8px 12px;background:rgba(239,68,68,.1);border-radius:10px}
+.auth-switch{margin-top:18px;text-align:center;font-size:13px;color:rgba(255,255,255,.45)}
+.auth-switch a{color:#60A5FA;font-weight:600;cursor:pointer;text-decoration:none}
+.auth-switch a:hover{text-decoration:underline}
+.auth-loading{display:none;text-align:center;padding:12px;color:rgba(255,255,255,.6);font-size:13px}
+
+
 
 /* ── Top Bar ────────────────────────────────────────────── */
 #top-bar{
@@ -338,7 +352,7 @@ svg{display:block}
 
     <div class="login-card">
       <p class="login-title">Welcome back</p>
-      <p class="login-sub">Sign in to continue</p>
+      <p class="login-sub">Sign in to your account</p>
       <div id="login-error"></div>
 
       <div class="field">
@@ -353,14 +367,66 @@ svg{display:block}
         <div class="field-wrap">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <input type="password" id="inp-pass" placeholder="Enter password"/>
-          <span class="pass-toggle" id="pass-toggle" onclick="togglePass()">
+          <span class="pass-toggle" onclick="togglePass('inp-pass')">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </span>
         </div>
       </div>
 
-      <button class="btn-login" onclick="doLogin()">Sign In</button>
-      <p class="login-demo">Demo: <span>9800000001</span> / <span>password123</span></p>
+      <button class="btn-login" id="btn-signin" onclick="doLogin()">Sign In</button>
+      <div class="auth-loading" id="login-loading">⏳ Signing in…</div>
+      <p class="auth-switch">Don't have an account? <a onclick="showSignup()">Sign Up</a></p>
+    </div>
+  </div>
+
+  <!-- ── Sign Up ── -->
+  <div id="signup-screen">
+    <div class="login-glow" style="margin-bottom:20px">
+      <span class="login-logo">N</span>
+    </div>
+    <p style="font-family:var(--font2);font-size:28px;font-weight:700;color:#fff;letter-spacing:-0.5px;margin-bottom:4px">Create Account</p>
+    <p class="login-tagline" style="margin-bottom:28px">Join Nexo today — it's free</p>
+
+    <div class="login-card">
+      <p class="login-title">Sign Up</p>
+      <p class="login-sub">Fill in your details below</p>
+      <div id="signup-error"></div>
+
+      <div class="field">
+        <label>Full Name</label>
+        <div class="field-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <input type="text" id="su-name" placeholder="Your full name"/>
+        </div>
+      </div>
+      <div class="field">
+        <label>Mobile Number</label>
+        <div class="field-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
+          <input type="tel" id="su-mobile" placeholder="Enter mobile number" inputmode="numeric"/>
+        </div>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <div class="field-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <input type="password" id="su-pass" placeholder="Min. 6 characters"/>
+          <span class="pass-toggle" onclick="togglePass('su-pass')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Confirm Password</label>
+        <div class="field-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <input type="password" id="su-pass2" placeholder="Repeat password"/>
+        </div>
+      </div>
+
+      <button class="btn-login" id="btn-signup" onclick="doSignup()">Create Account</button>
+      <div class="auth-loading" id="signup-loading">⏳ Creating account…</div>
+      <p class="auth-switch">Already have an account? <a onclick="showLogin()">Sign In</a></p>
     </div>
   </div>
 
@@ -517,13 +583,15 @@ svg{display:block}
 
 <script>
 // ── State ──────────────────────────────────────────────────
-let state = {
+// Defined on window so Firebase module script can access it
+window.state = {
   user: null,
   contacts: [],
   activeContact: null,
   messages: {},
   currentTab: 'chats'
 };
+let state = window.state; // local alias so existing code works unchanged
 
 const AVATAR_COLORS = ['#2563EB','#7C3AED','#059669','#D97706','#DC2626','#0891B2','#BE185D','#65A30D'];
 function avatarColor(name){ let h=0; for(let c of name) h=c.charCodeAt(0)+((h<<5)-h); return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length]; }
@@ -540,54 +608,53 @@ async function api(path, opts={}){
   } catch(e){ return {ok:false,error:'Network error'}; }
 }
 
-// ── Login ──────────────────────────────────────────────────
-function togglePass(){
-  const inp = document.getElementById('inp-pass');
+// ── Auth UI helpers ────────────────────────────────────────
+function togglePass(id){
+  const inp = document.getElementById(id||'inp-pass');
   inp.type = inp.type==='password' ? 'text' : 'password';
 }
-
-async function doLogin(){
-  const mobile = document.getElementById('inp-mobile').value.trim();
-  const pass   = document.getElementById('inp-pass').value;
-  const errEl  = document.getElementById('login-error');
-  errEl.style.display='none';
-
-  if(!mobile||!pass){ showErr('Please fill in all fields.'); return; }
-
-  const btn = document.querySelector('.btn-login');
-  btn.textContent='Signing in…'; btn.disabled=true;
-
-  const res = await api('/api/login', {method:'POST', body:{mobile, password:pass}});
-  btn.textContent='Sign In'; btn.disabled=false;
-
-  if(res.ok){
-    state.user = {name:res.name, avatar:res.avatar, mobile};
-    bootApp();
-  } else {
-    showErr(res.error||'Login failed. Try again.');
-  }
+function showLogin(){
+  document.getElementById('signup-screen').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
 }
-
-function showErr(msg){
-  const e = document.getElementById('login-error');
-  e.textContent=msg; e.style.display='block';
+function showSignup(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('signup-screen').style.display='flex';
 }
+function showErr(msg, screenId){
+  const id = screenId||'login-error';
+  const e = document.getElementById(id);
+  if(e){ e.textContent=msg; e.style.display='block'; }
+}
+function hideErr(id){ const e=document.getElementById(id); if(e) e.style.display='none'; }
+
+// doLogin and doSignup are overridden by Firebase module below
+// These are placeholder stubs that get replaced after Firebase loads
+function doLogin(){ showErr('Loading Firebase…'); }
+function doSignup(){ showErr('Loading Firebase…','signup-error'); }
 
 document.getElementById('inp-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 document.getElementById('inp-mobile').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('inp-pass').focus(); });
+document.getElementById('su-pass2').addEventListener('keydown', e=>{ if(e.key==='Enter') doSignup(); });
 
 // ── Boot App ───────────────────────────────────────────────
 async function bootApp(){
+  // state.user is set by Firebase module before calling bootApp
+  const u = window.state.user;
+  if(!u){ console.error('bootApp called with no user'); return; }
+
   document.getElementById('login-screen').style.display='none';
+  document.getElementById('signup-screen').style.display='none';
   document.getElementById('top-bar').style.display='flex';
   document.getElementById('pages').style.display='block';
   document.getElementById('bottom-nav').style.display='grid';
 
   // Settings profile
-  document.getElementById('settings-avatar').textContent = state.user.avatar;
-  document.getElementById('settings-avatar').style.background = avatarColor(state.user.name);
-  document.getElementById('settings-name').textContent  = state.user.name;
-  document.getElementById('settings-mobile').textContent = '+91 '+state.user.mobile;
+  const av = document.getElementById('settings-avatar');
+  av.textContent = u.avatar || '?';
+  av.style.background = avatarColor(u.name || 'User');
+  document.getElementById('settings-name').textContent   = u.name   || 'User';
+  document.getElementById('settings-mobile').textContent = '+' + (u.mobile || '');
 
   await loadContacts();
   await loadStatus();
@@ -595,9 +662,17 @@ async function bootApp(){
 }
 
 async function doLogout(){
-  await api('/api/logout',{method:'POST'});
-  state = {user:null,contacts:[],activeContact:null,messages:{},currentTab:'chats'};
+  if(window._fbSignOut) await window._fbSignOut();
+  await api('/api/logout',{method:'POST'}).catch(()=>{});
+  // Reset shared state
+  window.state.user          = null;
+  window.state.contacts      = [];
+  window.state.activeContact = null;
+  window.state.messages      = {};
+  window.state.currentTab    = 'chats';
+  state = window.state;
   document.getElementById('login-screen').style.display='flex';
+  document.getElementById('signup-screen').style.display='none';
   document.getElementById('top-bar').style.display='none';
   document.getElementById('pages').style.display='none';
   document.getElementById('bottom-nav').style.display='none';
@@ -863,15 +938,34 @@ function comingSoon(type){
 
 // ── Util ───────────────────────────────────────────────────
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Expose everything the Firebase module needs ─────────────
+window.bootApp        = bootApp;
+window.renderContacts = renderContacts;
+window.avatarColor    = avatarColor;
+window.escHtml        = escHtml;
+window.autoResize     = autoResize;
+window.scrollToBottom = scrollToBottom;
+window.simulateReply  = simulateReply;
+window.showToast      = showToast;
+window.showErr        = showErr;
+window.hideErr        = hideErr;
+window.openChat       = openChat;
+window.closeChat      = closeChat;
 </script>
 
 <!-- ── Firebase SDK (module) ── -->
 <script type="module">
-import { initializeApp }     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot,
-         query, orderBy, serverTimestamp }
-                              from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+         query, orderBy, serverTimestamp, doc, setDoc, getDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword,
+         signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
+// ── Firebase config ──────────────────────────────────────────
 const firebaseConfig = {
   apiKey:            "AIzaSyDYmJG3cJRpBmIvZB6CIScjlKY0uu1ZFCM",
   authDomain:        "nexo-app-b9ec4.firebaseapp.com",
@@ -883,10 +977,101 @@ const firebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const db    = getFirestore(fbApp);
+const auth  = getAuth(fbApp);
 
+// ── Helper: mobile → fake email (Firebase Auth needs email format) ──
+function toEmail(mobile){ return mobile.replace(/\D/g,'') + '@nexo.app'; }
 function roomId(cid){ return `room_${cid}`; }
+function initials(name){ return name.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
 
-// ── Real-time listener ───────────────────────────────────────
+// ── Expose sign out ──────────────────────────────────────────
+window._fbSignOut = () => signOut(auth).catch(()=>{});
+
+// ── Auth state observer — auto-login if session exists ───────
+onAuthStateChanged(auth, async (user) => {
+  if(user){
+    // User already logged in — restore session
+    try{
+      const snap = await getDoc(doc(db,'users', user.uid));
+      if(snap.exists()){
+        const d = snap.data();
+        window.state.user = { name: d.name, avatar: initials(d.name), mobile: d.mobile, uid: user.uid };
+        document.getElementById('login-screen').style.display  = 'none';
+        document.getElementById('signup-screen').style.display = 'none';
+        bootApp();
+      }
+    } catch(e){ console.warn('Session restore failed:', e); }
+  }
+});
+
+// ── SIGN UP ──────────────────────────────────────────────────
+window.doSignup = async function(){
+  const name   = document.getElementById('su-name').value.trim();
+  const mobile = document.getElementById('su-mobile').value.trim().replace(/\D/g,'');
+  const pass   = document.getElementById('su-pass').value;
+  const pass2  = document.getElementById('su-pass2').value;
+  hideErr('signup-error');
+
+  if(!name)               { showErr('Please enter your name.','signup-error'); return; }
+  if(mobile.length < 7)   { showErr('Enter a valid mobile number.','signup-error'); return; }
+  if(pass.length < 6)     { showErr('Password must be at least 6 characters.','signup-error'); return; }
+  if(pass !== pass2)      { showErr('Passwords do not match.','signup-error'); return; }
+
+  const btn = document.getElementById('btn-signup');
+  const ldr = document.getElementById('signup-loading');
+  btn.style.display='none'; ldr.style.display='block';
+
+  try{
+    const cred = await createUserWithEmailAndPassword(auth, toEmail(mobile), pass);
+    // Save profile to Firestore
+    await setDoc(doc(db,'users', cred.user.uid), {
+      name, mobile, createdAt: serverTimestamp()
+    });
+    window.state.user = { name, avatar: initials(name), mobile, uid: cred.user.uid };
+    document.getElementById('signup-screen').style.display='none';
+    showToast('🎉 Account created! Welcome to Nexo!');
+    bootApp();
+  } catch(err){
+    const msg = err.code==='auth/email-already-in-use'
+      ? 'This mobile number is already registered. Please sign in.'
+      : err.code==='auth/weak-password' ? 'Password is too weak.'
+      : err.message || 'Sign up failed. Try again.';
+    showErr(msg,'signup-error');
+  } finally {
+    btn.style.display='block'; ldr.style.display='none';
+  }
+};
+
+// ── SIGN IN ──────────────────────────────────────────────────
+window.doLogin = async function(){
+  const mobile = document.getElementById('inp-mobile').value.trim().replace(/\D/g,'');
+  const pass   = document.getElementById('inp-pass').value;
+  hideErr('login-error');
+
+  if(!mobile||!pass){ showErr('Please fill in all fields.','login-error'); return; }
+
+  const btn = document.getElementById('btn-signin');
+  const ldr = document.getElementById('login-loading');
+  btn.style.display='none'; ldr.style.display='block';
+
+  try{
+    const cred = await signInWithEmailAndPassword(auth, toEmail(mobile), pass);
+    const snap = await getDoc(doc(db,'users', cred.user.uid));
+    const name = snap.exists() ? snap.data().name : 'User';
+    window.state.user = { name, avatar: initials(name), mobile, uid: cred.user.uid };
+    document.getElementById('login-screen').style.display='none';
+    bootApp();
+  } catch(err){
+    const msg = err.code==='auth/user-not-found' || err.code==='auth/wrong-password' || err.code==='auth/invalid-credential'
+      ? 'Wrong mobile number or password.'
+      : err.message || 'Login failed. Try again.';
+    showErr(msg,'login-error');
+  } finally {
+    btn.style.display='block'; ldr.style.display='none';
+  }
+};
+
+// ── REAL-TIME CHAT LISTENER ──────────────────────────────────
 let unsub = null;
 
 function startListener(contactId){
@@ -899,7 +1084,7 @@ function startListener(contactId){
       const msg = { id: ch.doc.id, text: d.text, sender: d.sender, time: d.time||'' };
       const area = document.getElementById('chat-bg');
       if(!area) return;
-      if(area.querySelector(`[data-fbid="${msg.id}"]`)) return; // already shown
+      if(area.querySelector(`[data-fbid="${msg.id}"]`)) return;
       if(window.state?.activeContact?.id !== contactId) return;
       const contact = window.state.activeContact;
       const div = document.createElement('div');
@@ -913,7 +1098,7 @@ function startListener(contactId){
           ${escHtml(msg.text)}
           <div class="bubble-time">
             ${msg.time}
-            ${msg.sender==='me'?'<span class="tick"><svg width="14" height="10" viewBox="0 0 14 10" fill="none"><path d="M1 5l3 3 5-7" stroke="#a5f3fc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 5l3 3 5-7" stroke="#a5f3fc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>':''} 
+            ${msg.sender==='me'?'<span class="tick"><svg width="14" height="10" viewBox="0 0 14 10" fill="none"><path d="M1 5l3 3 5-7" stroke="#a5f3fc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 5l3 3 5-7" stroke="#a5f3fc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>':''}
           </div>
         </div>`;
       area.appendChild(div);
@@ -922,21 +1107,21 @@ function startListener(contactId){
   }, e => console.warn('Firestore error:', e));
 }
 
-// ── Patch openChat to start Firestore listener ───────────────
+// ── Patch openChat ───────────────────────────────────────────
 const _origOpen = window.openChat;
 window.openChat = async function(contactId){
   await _origOpen(contactId);
   startListener(contactId);
 };
 
-// ── Patch closeChat to stop listener ────────────────────────
+// ── Patch closeChat ──────────────────────────────────────────
 const _origClose = window.closeChat;
 window.closeChat = function(){
   if(unsub){ unsub(); unsub=null; }
   _origClose();
 };
 
-// ── Patch sendMessage to ALSO write to Firestore ─────────────
+// ── Patch sendMessage ────────────────────────────────────────
 window.sendMessage = async function(){
   const inp     = document.getElementById('msg-input');
   const text    = inp.value.trim();
@@ -946,13 +1131,11 @@ window.sendMessage = async function(){
 
   const timeStr = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 
-  // Save to Firestore (real-time listener will display it)
   try{
     await addDoc(collection(db,'chats',roomId(contact.id),'messages'),
       { text, sender:'me', time: timeStr, createdAt: serverTimestamp() });
   } catch(e){ console.warn('Firestore write failed:',e); }
 
-  // Also update Flask backend for contact preview
   try{
     const res = await fetch('/api/send',{
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -967,7 +1150,7 @@ window.sendMessage = async function(){
   } catch(e){ console.warn('Flask API error:',e); }
 };
 
-console.log('🔥 Firebase connected — real-time chat active!');
+console.log('🔥 Firebase Auth + Firestore connected!');
 </script>
 </body>
 </html>
