@@ -4,6 +4,24 @@ import os
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
+from flask import send_from_directory
+import os
+
+@app.route('/manifest.json')
+def manifest():
+    return send_from_directory(
+        os.path.join(app.root_path, 'static'),
+        'manifest.json',
+        mimetype='application/manifest+json'
+    )
+
+@app.route('/sw.js')
+def service_worker():
+    return send_from_directory(
+        os.path.join(app.root_path, 'static'),
+        'sw.js',
+        mimetype='application/javascript'
+    )
 
 # ── NOTE ────────────────────────────────────────────────────────────────────
 # Auth, contacts, and messages are now fully handled by Firebase on the
