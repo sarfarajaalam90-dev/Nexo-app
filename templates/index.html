@@ -1041,7 +1041,23 @@ window.openCtxMenu = openCtxMenu;
         <div class="settings-label">Account</div>
         <div class="settings-row" onclick="openEditProfile()"><div class="settings-icon" style="background:rgba(59,130,246,.12)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="settings-row-info"><div class="settings-row-name">Edit Profile</div><div class="settings-row-sub">Edit name, photo, bio</div></div><svg class="settings-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
         <div class="divider"></div>
-        <div class="settings-row" onclick="showComingSoonAlert('Privacy &amp; Security')"><div class="settings-icon" style="background:rgba(22,163,74,.1)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div class="settings-row-info"><div class="settings-row-name">Privacy & Security</div><div class="settings-row-sub">Last seen, blocked contacts</div></div><svg class="settings-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+        <div class="settings-row" onclick="togglePrivacyPanel()" id="privacy-row">
+          <div class="settings-icon" style="background:rgba(22,163,74,.1)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <div class="settings-row-info"><div class="settings-row-name">Privacy &amp; Security</div><div class="settings-row-sub">Auto-delete, blocked contacts</div></div>
+          <svg id="privacy-chevron" style="transition:transform .2s;flex-shrink:0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div id="privacy-panel" style="display:none;background:var(--card);border-top:1px solid var(--border);padding:0 16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);">
+            <div>
+              <div style="font-size:14px;font-weight:600;color:var(--txt)">Auto-Delete Messages</div>
+              <div style="font-size:12px;color:var(--txt3);margin-top:2px">Messages delete automatically after 1 hour</div>
+            </div>
+            <div id="auto-delete-toggle" onclick="toggleAutoDelete()" style="width:46px;height:26px;border-radius:13px;background:var(--nexo);cursor:pointer;position:relative;transition:background .2s;flex-shrink:0;">
+              <div id="auto-delete-knob" style="width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:3px;left:23px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3);"></div>
+            </div>
+          </div>
+          <div id="auto-delete-status" style="font-size:11px;color:var(--nexo);padding:8px 0 10px;font-weight:500;">✓ Auto-delete is ON — messages expire after 1 hour</div>
+        </div>
       </div>
       <div class="divider"></div>
       <div class="settings-section">
@@ -1756,6 +1772,43 @@ window.updateSettingsProfile=updateSettingsProfile;
 
 // ── Expose everything the Firebase module needs ─────────────
 window.bootApp        = bootApp;
+
+// ── Privacy & Security panel ─────────────────────────────────
+function togglePrivacyPanel(){
+  const panel   = document.getElementById('privacy-panel');
+  const chevron = document.getElementById('privacy-chevron');
+  const open    = panel.style.display === 'block';
+  panel.style.display  = open ? 'none' : 'block';
+  chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function _renderAutoDeleteUI(){
+  const on     = window.state.autoDeleteMessages !== false; // default ON
+  const toggle = document.getElementById('auto-delete-toggle');
+  const knob   = document.getElementById('auto-delete-knob');
+  const status = document.getElementById('auto-delete-status');
+  if(!toggle) return;
+  toggle.style.background = on ? 'var(--nexo)' : 'var(--txt3)';
+  knob.style.left         = on ? '23px' : '3px';
+  if(status){
+    status.textContent  = on
+      ? '✓ Auto-delete is ON — messages expire after 1 hour'
+      : '✗ Auto-delete is OFF — messages are kept forever';
+    status.style.color  = on ? 'var(--nexo)' : 'var(--txt3)';
+  }
+}
+
+function toggleAutoDelete(){
+  const current = window.state.autoDeleteMessages !== false;
+  window.state.autoDeleteMessages = !current;
+  _renderAutoDeleteUI();
+  if(typeof window._fbSaveAutoDeleteSetting === 'function'){
+    window._fbSaveAutoDeleteSetting(!current);
+  }
+}
+window.togglePrivacyPanel = togglePrivacyPanel;
+window.toggleAutoDelete   = toggleAutoDelete;
+window._renderAutoDeleteUI = _renderAutoDeleteUI;
 window.renderContacts = renderContacts;
 window.avatarColor    = avatarColor;
 window.escHtml        = escHtml;
@@ -2193,7 +2246,7 @@ import { initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot,
          query, orderBy, serverTimestamp, doc, setDoc, getDoc,
-         getDocs, where, increment }
+         getDocs, where, increment, deleteDoc, writeBatch, Timestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword,
          signInWithEmailAndPassword, signOut, onAuthStateChanged }
@@ -2656,11 +2709,64 @@ window._fbClearUnread = function(contactId){
     .catch(()=>{});
 };
 
+// ── Save / load auto-delete setting ──────────────────────────
+window._fbSaveAutoDeleteSetting = function(enabled){
+  const uid = window.state?.user?.uid;
+  if(!uid) return;
+  setDoc(doc(db,'userSettings',uid), { autoDeleteMessages: enabled }, { merge: true })
+    .catch(e => console.warn('Save autoDelete setting failed:', e));
+};
+
+async function _loadAutoDeleteSetting(){
+  const uid = window.state?.user?.uid;
+  if(!uid) return;
+  try{
+    const snap = await getDoc(doc(db,'userSettings',uid));
+    // Default is ON if doc doesn't exist yet
+    window.state.autoDeleteMessages = snap.exists()
+      ? (snap.data().autoDeleteMessages !== false)
+      : true;
+  } catch(e){
+    window.state.autoDeleteMessages = true; // default ON on error
+  }
+  if(typeof window._renderAutoDeleteUI === 'function') window._renderAutoDeleteUI();
+}
+
+// ── Delete expired messages from a chat room ──────────────────
+async function _deleteExpiredMessages(chatPath){
+  try{
+    const now = Date.now();
+    const q   = query(collection(db, ...chatPath.split('/')), orderBy('createdAt'));
+    const snap = await getDocs(q);
+    const expired = snap.docs.filter(d => {
+      const exp = d.data().expiresAt;
+      if(!exp) return false;
+      const expMs = exp.toMillis ? exp.toMillis() : exp.seconds * 1000;
+      return expMs < now;
+    });
+    if(expired.length === 0) return;
+    const batch = writeBatch(db);
+    expired.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    console.log(`[AutoDelete] Deleted ${expired.length} expired message(s) from ${chatPath}`);
+  } catch(e){
+    console.warn('[AutoDelete] cleanup failed:', e);
+  }
+}
+
 // ── Patch openChat ───────────────────────────────────────────
 const _origOpen = window.openChat;
 window.openChat = async function(contactId){
   await _origOpen(contactId);
   startListener(contactId);
+  // Clean up expired messages every time a chat is opened
+  const contact = window.state?.activeContact;
+  if(contact){
+    const chatPath = contact.isGroup
+      ? `groups/${contactId}/messages`
+      : `chats/${roomId(contactId)}/messages`;
+    if(!chatPath.includes('INVALID')) _deleteExpiredMessages(chatPath);
+  }
 };
 
 // ── Patch closeChat ──────────────────────────────────────────
@@ -2698,14 +2804,21 @@ window._fbSendMessage = async function(){
   }
 
   try{
-    const ref = await addDoc(chatColRef,
-      {
-        text,
-        sender: window.state.user.uid,
-        senderName: window.state.user.name,
-        time: timeStr,
-        createdAt: serverTimestamp()
-      });
+    const autoDelete = window.state.autoDeleteMessages !== false; // default ON
+    const expiresAt  = autoDelete
+      ? Timestamp.fromDate(new Date(Date.now() + 60 * 60 * 1000)) // 1 hour from now
+      : null;
+
+    const msgData = {
+      text,
+      sender: window.state.user.uid,
+      senderName: window.state.user.name,
+      time: timeStr,
+      createdAt: serverTimestamp(),
+      ...(expiresAt ? { expiresAt } : {})
+    };
+
+    const ref = await addDoc(chatColRef, msgData);
     console.log('sendMessage: Firestore write OK, docId:', ref.id);
 
     if(!isGroup){
@@ -2771,13 +2884,13 @@ function loadFirestoreContacts(){
 const _origBoot = window.bootApp;
 window.bootApp = async function(){
   await _origBoot();
-  loadFirestoreContacts();  // real-time listener, no await needed
-  // Show FABs
+  loadFirestoreContacts();
+  // Load auto-delete preference from Firestore
+  await _loadAutoDeleteSetting();
+  // Expose render helper so the main script toggle UI can call it
+  window._renderAutoDeleteUI = window._renderAutoDeleteUI || function(){};
   const fab = document.getElementById('fab-new-chat');
   if(fab) fab.classList.add('visible');
-  const gfab = document.getElementById('fab-new-group');
-  // group creation moved to long-press context menu
-  // ✅ FIX: Start incoming call listener AFTER login
   const myUid = window.state?.user?.uid;
   if(myUid) _listenForIncomingCalls(myUid);
 };
