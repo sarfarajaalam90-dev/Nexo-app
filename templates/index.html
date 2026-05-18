@@ -2215,9 +2215,15 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
 
-      // Contacts subcollection — own contacts only
+      // Contacts subcollection:
+      // Owner can read/write their own contacts.
+      // ANY authenticated user can write (create/update) a contact entry here
+      // so that when A messages B, A can create B's contact entry for A
+      // (mutual visibility). A cannot read or delete B's other contacts.
       match /contacts/{contactId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read:   if request.auth != null && request.auth.uid == uid;
+        allow write:  if request.auth != null
+                      && (request.auth.uid == uid || request.auth.uid == contactId);
       }
     }
 
@@ -2717,7 +2723,7 @@ window._fbSendMessage = async function(){
         time:   timeStr,
         unread: increment(1),
         updatedAt: serverTimestamp()
-      }, { merge: true }).catch(e=>console.warn('Mutual visibility update (non-critical):', e));
+      }, { merge: true }).catch(e=>console.error('⚠️ Mutual visibility FAILED (check Firestore rules):', e.code, e.message));
     } else {
       // Update group last message for all members
       setDoc(doc(db,'groups',contact.id),{ last:text, time:timeStr, updatedAt:serverTimestamp() },{merge:true}).catch(()=>{});
@@ -2867,7 +2873,6 @@ window.addContact = async function(foundUid, foundName, mobile, av){
     closeNewChatModal();
 
     // ── MUTUAL CONTACT: write YOU into THEIR contacts too ─────
-    // User B sees User A automatically — no need to add back
     const myData = window.state.user;
     const myAv = (myData.name||'?').trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     setDoc(doc(db,'users',foundUid,'contacts',myUid), {
@@ -2876,11 +2881,11 @@ window.addContact = async function(foundUid, foundName, mobile, av){
       mobile: myData.mobile || '',
       avatar: myAv,
       status: 'online',
-      last:   'Added you as a contact',
-      time:   new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
-      unread: 1,
+      last:   '',
+      time:   '',
+      unread: 0,
       addedAt: serverTimestamp()
-    }).catch(e=>console.warn('Mutual contact write (non-critical):', e));
+    }).catch(e=>console.error('⚠️ Mutual contact write FAILED (check Firestore rules):', e.code, e.message));
 
   }catch(e){
     console.warn('addContact error:',e);
