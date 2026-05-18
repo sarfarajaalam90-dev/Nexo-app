@@ -2,7 +2,8 @@
   "name": "Secret \u2013 Private Messenger",
   "short_name": "Secret",
   "description": "End-to-end encrypted private messaging app",
-  "start_url": "/",
+  "start_url": "/Secret-App/templates/index.html",
+  "scope": "/Secret-App/templates/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#061428",
@@ -19,6 +20,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "categories": [
