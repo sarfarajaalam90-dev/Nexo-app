@@ -1588,6 +1588,9 @@ window.bootApp = async function(){
   // Show FAB
   const fab = document.getElementById('fab-new-chat');
   if(fab) fab.classList.add('visible');
+  // ✅ FIX: Start incoming call listener AFTER login
+  const myUid = window.state?.user?.uid;
+  if(myUid) _listenForIncomingCalls(myUid);
 };
 
 // ── Search user by mobile & add as contact ───────────────────
@@ -1714,35 +1717,37 @@ window.startCall = async function(type){
   const me      = window.state?.user;
   if(!contact || !me){ showToast('Open a chat first'); return; }
 
-  // Channel name = sorted UIDs (same canonical approach as chat room)
+  // ✅ FIX: channelName = sorted UIDs (same as chat roomId — canonical)
   const channelName = [me.uid, contact.id].sort().join('_');
 
-  // Write call doc to Firestore — receiver's listener will pick this up
-  const callRef = doc(db, 'calls', channelName);
+  // ✅ FIX: Write to calls/{receiverUid} — a SINGLE doc the receiver watches directly.
+  // No composite index needed. Receiver's listener is just onSnapshot(doc(...)).
+  const callRef = doc(db, 'calls', contact.id);
   currentCallDoc = callRef;
   await setDoc(callRef, {
     channelName,
-    callType  : type,               // 'voice' | 'video'
-    callerUid : me.uid,
-    callerName: me.name,
+    callType   : type,
+    callerUid  : me.uid,
+    callerName : me.name,
     receiverUid: contact.id,
-    status    : 'ringing',
-    createdAt : serverTimestamp()
+    status     : 'pending',   // ✅ using 'pending' as requested
+    createdAt  : serverTimestamp()
   });
 
-  // Show overlay
+  // Show overlay immediately for caller
   _showCallOverlay(contact.name, type, false);
   document.getElementById('call-status-txt').textContent = 'Ringing…';
 
-  // Join Agora channel
+  // ✅ FIX: Join Agora AFTER writing so receiver has time to see the call doc
   await _joinAgoraChannel(channelName, type);
 
-  // Watch for receiver accepting / declining
+  // Watch caller-side for accepted / declined / ended
   callUnsub = onSnapshot(callRef, async snap => {
     const d = snap.data();
     if(!d) return;
     if(d.status === 'accepted'){
-      document.getElementById('call-status-txt').textContent = type === 'video' ? '📹 Video call' : '🎙️ Voice call';
+      document.getElementById('call-status-txt').textContent =
+        type === 'video' ? '📹 Video call' : '🎙️ Voice call';
     }
     if(d.status === 'declined' || d.status === 'ended'){
       await _cleanupCall();
@@ -1752,20 +1757,20 @@ window.startCall = async function(type){
 
 // ── Incoming call listener (started once after login) ────────
 function _listenForIncomingCalls(myUid){
-  const callsRef = collection(db, 'calls');
-  onSnapshot(
-    query(callsRef, where('receiverUid','==', myUid), where('status','==','ringing')),
-    snap => {
-      snap.docChanges().forEach(ch => {
-        if(ch.type !== 'added') return;
-        const d = ch.doc.data();
-        // Don't show if we're already in a call
-        if(document.getElementById('call-overlay').classList.contains('active')) return;
-        incomingCallData = { ...d, docId: ch.doc.id };
-        _showIncomingModal(d);
-      });
-    }
-  );
+  // ✅ FIX: Listen to a single doc calls/{myUid} — no composite index needed.
+  // Caller writes to calls/{receiverUid}, so receiver just watches their own doc.
+  const myCallDoc = doc(db, 'calls', myUid);
+  onSnapshot(myCallDoc, snap => {
+    if(!snap.exists()) return;
+    const d = snap.data();
+    // Only react to 'pending' calls not sent by me
+    if(d.status !== 'pending' || d.callerUid === myUid) return;
+    // Don't interrupt an active call
+    if(document.getElementById('call-overlay').classList.contains('active')) return;
+    // Stash the data for accept/decline
+    incomingCallData = { ...d, docId: snap.id };
+    _showIncomingModal(d);
+  });
 }
 
 function _showIncomingModal(d){
@@ -1807,6 +1812,7 @@ window.declineCall = async function(){
   if(!incomingCallData) return;
   document.getElementById('incoming-call-modal').classList.remove('active');
   const callRef = doc(db, 'calls', incomingCallData.docId);
+  // ✅ FIX: set status to 'declined' so caller sees it, then clear after short delay
   await setDoc(callRef, { status: 'declined' }, { merge: true });
   incomingCallData = null;
 };
@@ -1884,6 +1890,13 @@ async function _cleanupCall(){
   if(localAudioTrack){ localAudioTrack.close(); localAudioTrack=null; }
   if(localVideoTrack){ localVideoTrack.close(); localVideoTrack=null; }
   if(agoraClient){ try{ await agoraClient.leave(); }catch(e){} agoraClient=null; }
+  // ✅ FIX: Delete the call doc so stale 'pending' status never re-triggers listener
+  if(currentCallDoc){
+    try{
+      const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      await deleteDoc(currentCallDoc);
+    } catch(e){ /* best effort */ }
+  }
   currentCallDoc  = null;
   incomingCallData= null;
   isMuted  = false;
