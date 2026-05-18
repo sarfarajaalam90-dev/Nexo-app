@@ -3513,11 +3513,130 @@ window.loadCallHistory = loadCallHistory;
 
 
 <script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(r => console.log('SW registered:', r.scope))
-      .catch(e => console.warn('SW failed:', e));
+/* ═══════════════════════════════════════════════════════════════
+   Web Push Notifications — Secret App
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── VAPID public key (from your push server) ──────────────────
+const VAPID_PUBLIC_KEY = 'BJa536ZN39g2MQWdk4hdVhcrnEL32VgcUw6ILEot6OLt41W04ZevQt5AdVH7UOfM6UKPPjWBzzyuVEZP8pEAHyU';
+
+/** Convert a base64url VAPID key to a Uint8Array for the browser API */
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+/** Store the push subscription endpoint on your backend / Firestore */
+async function savePushSubscription(subscription) {
+  try {
+    // If you use Firestore, replace the fetch() below with a setDoc() call:
+    //
+    //   const uid = window.state?.user?.uid;
+    //   if (!uid) return;
+    //   await setDoc(doc(db, 'pushSubscriptions', uid), {
+    //     subscription: subscription.toJSON(),
+    //     updatedAt: serverTimestamp()
+    //   });
+    //
+    // For a REST back-end:
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(subscription)
+    });
+    console.log('[Push] Subscription saved to server.');
+  } catch (err) {
+    console.warn('[Push] Could not save subscription:', err);
+  }
+}
+
+/** Request permission and subscribe to push */
+async function setupPushNotifications(swReg) {
+  // Only proceed if Push is supported
+  if (!('PushManager' in window)) {
+    console.warn('[Push] PushManager not supported in this browser.');
+    return;
+  }
+
+  // Ask for notification permission (shows the system prompt once)
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    console.warn('[Push] Notification permission denied.');
+    return;
+  }
+
+  try {
+    // Check for an existing subscription first to avoid duplicate registrations
+    let subscription = await swReg.pushManager.getSubscription();
+
+    if (!subscription) {
+      subscription = await swReg.pushManager.subscribe({
+        userVisibleOnly: true,                          // required by browsers
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+      console.log('[Push] New subscription created:', subscription.endpoint);
+    } else {
+      console.log('[Push] Reusing existing subscription.');
+    }
+
+    // Persist the subscription so the server can send pushes later
+    await savePushSubscription(subscription);
+
+  } catch (err) {
+    console.error('[Push] Subscription failed:', err);
+  }
+}
+
+/* ── Handle notification-click → open / focus the app ──────── */
+// This runs in the PAGE (not the SW). The SW also handles
+// notificationclick for when the app is closed — see sw.js.
+if ('serviceWorker' in navigator) {
+  // Listen for messages the SW forwards after a notification action
+  navigator.serviceWorker.addEventListener('message', event => {
+    const { type, action, callId } = event.data || {};
+
+    if (type === 'NOTIFICATION_ACTION') {
+      if (action === 'answer' && callId) {
+        // Open / focus the incoming-call modal for this callId
+        const modal = document.getElementById('incoming-call-modal');
+        if (modal) modal.style.display = 'flex';
+        console.log('[Push] Answer action received for call:', callId);
+      } else if (action === 'open') {
+        // Just bring the app to the foreground (already done by focus)
+        console.log('[Push] Open action received.');
+      }
+    }
+  });
+}
+
+/* ── Register Service Worker & wire up push ─────────────────── */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      console.log('[SW] Registered:', reg.scope);
+
+      // Wait until the SW is active (handles page refresh on first install)
+      const activeReg = await new Promise(resolve => {
+        if (reg.active) { resolve(reg); return; }
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing;
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'activated') resolve(reg);
+          });
+        });
+        // Fallback: also resolve once navigator.serviceWorker.ready settles
+        navigator.serviceWorker.ready.then(resolve);
+      });
+
+      // Now set up push notifications
+      await setupPushNotifications(activeReg);
+
+    } catch (err) {
+      console.warn('[SW] Registration failed:', err);
+    }
   });
 }
 </script>
