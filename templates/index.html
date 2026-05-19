@@ -2798,106 +2798,123 @@ function startListener(contactId){
   }
 
   console.log('[Secret] startListener → Firestore path: ' + chatPath);
-  const q = query(collection(db, ...chatPath.split('/')), orderBy('createdAt'));
-  unsub = onSnapshot(q, snap => {
+  const colRef = collection(db, ...chatPath.split('/'));
+
+  // ── Step 1: Fetch ALL already-confirmed messages up-front ──────
+  // orderBy('createdAt') excludes docs whose serverTimestamp hasn't resolved yet,
+  // so we use getDocs (no ordering) to get every confirmed message immediately.
+  // This is what the receiver sees when they first open a chat.
+  getDocs(query(colRef, orderBy('createdAt'))).then(initSnap => {
+    const area = document.getElementById('chat-bg');
+    if(!area || window.state?.activeContact?.id !== contactId) return;
+    initSnap.forEach(docSnap => {
+      if(area.querySelector(`[data-fbid="${docSnap.id}"]`)) return;
+      _renderIncomingDoc(docSnap.id, docSnap.data(), contactId, area);
+    });
+    scrollToBottom();
+  }).catch(()=>{});
+
+  // ── Step 2: Live listener — only pick up NEW messages after now ─
+  // We start the listener AFTER the getDocs so there's no race between
+  // the initial snapshot and our pre-render above.
+  const listenQuery = query(colRef, orderBy('createdAt'));
+  unsub = onSnapshot(listenQuery, snap => {
     console.log('[Secret] onSnapshot fired —', snap.docChanges().length, 'change(s) on path:', chatPath);
     snap.docChanges().forEach(ch => {
-      // Handle 'added' (new messages) AND 'modified' (server timestamp resolving from null)
+      // 'added'    = new message arriving live
+      // 'modified' = serverTimestamp resolved (null → real value); render if not already shown
       if(ch.type !== 'added' && ch.type !== 'modified') return;
-      const d = ch.doc.data();
-      const myUid      = window.state?.user?.uid;
-      const senderRole = (d.sender === myUid) ? 'me' : 'them';
-      const msg = { id: ch.doc.id, text: d.text, sender: senderRole, time: d.time || '',
-                    mediaUrl: d.mediaUrl||null, mediaType: d.mediaType||null };
-      console.log('[Secret] new message | senderUid:', d.sender, '| myUid:', myUid, '| role:', senderRole, '| text:', msg.text);
+      const d   = ch.doc.data();
       const area = document.getElementById('chat-bg');
       if(!area) return;
-      if(area.querySelector(`[data-fbid="${msg.id}"]`)) return;
+      if(area.querySelector(`[data-fbid="${ch.doc.id}"]`)) return;
       if(window.state?.activeContact?.id !== contactId) return;
-
-      // Skip expired messages — don't render them, they'll be deleted by _deleteExpiredMessages
-      if(d.expiresAt){
-        const expMs = d.expiresAt.toMillis ? d.expiresAt.toMillis() : (d.expiresAt.seconds*1000);
-        if(expMs < Date.now()) return;
-      }
-      const contact = window.state.activeContact;
-      const div = document.createElement('div');
-      div.className = `bubble-row ${msg.sender}`;
-      div.setAttribute('data-fbid', msg.id);
-
-      // Tick logic: sent = 1 grey tick, delivered = 2 grey ticks, read = 2 blue ticks
-      // New messages from "me" start as sent (1 tick), then upgrade to delivered/read
-      const tickSvg = msg.sender==='me' ? `
-        <span class="tick tick-sent" data-msgid="${msg.id}">
-          <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-            <path class="tick-first" d="M1 5l3 3 5-7" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path class="tick-second" d="M5 5l3 3 5-7" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0;transition:opacity .3s"/>
-          </svg>
-        </span>` : '';
-
-      div.innerHTML = `
-        ${msg.sender==='them'
-          ? `<div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;background:${avatarColor(d.senderName||contact.name)};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">${(d.senderName||contact.name).trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>`
-          : ''}
-        <div class="bubble ${msg.sender}">
-          ${contact.isGroup && msg.sender==='them' && d.senderName
-            ? `<div style="font-size:11px;font-weight:700;color:${avatarColor(d.senderName)};margin-bottom:3px;">${escHtml(d.senderName)}</div>`
-            : ''}
-          ${msg.mediaType==='image' && msg.mediaUrl
-            ? `<img src="${msg.mediaUrl}" style="width:100%;max-width:210px;border-radius:14px 14px ${msg.sender==='me'?'4px':'14px'} 14px;display:block;cursor:pointer;" onclick="window.open('${msg.mediaUrl}','_blank')"/>`
-            : msg.mediaType==='voice' && msg.mediaUrl
-            ? `<div style="display:flex;align-items:center;gap:8px;min-width:180px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg><audio controls src="${msg.mediaUrl}" style="flex:1;height:28px;accent-color:#60A5FA;"></audio></div>`
-            : escHtml(msg.text)}
-          <div class="bubble-time">
-            ${msg.time}
-            ${tickSvg}
-          </div>
-        </div>`;
-
-      // Tick animation: after 800ms show 2nd tick (delivered), after 3s turn blue (read)
-      if(msg.sender==='me'){
-        setTimeout(()=>{
-          const tickEl = div.querySelector('.tick');
-          const tick2 = div.querySelector('.tick-second');
-          if(tick2) tick2.style.opacity='1';  // delivered
-          setTimeout(()=>{
-            if(tickEl){
-              // turn blue = read
-              div.querySelectorAll('.tick-first,.tick-second').forEach(p=>{ p.setAttribute('stroke','#60A5FA'); });
-            }
-          }, 2500);
-        }, 800);
-      }
-
-      // Long-press / right-click context menu
-      let _lpt;
-      div.addEventListener('pointerdown', ()=>{ _lpt=setTimeout(()=>{ openCtxMenu({preventDefault:()=>{},clientX:0,clientY:0},div); },550); });
-      div.addEventListener('pointerup',   ()=>clearTimeout(_lpt));
-      div.addEventListener('pointerleave',()=>clearTimeout(_lpt));
-      div.addEventListener('contextmenu', ev=>{ ev.preventDefault(); openCtxMenu(ev,div); });
-      area.appendChild(div);
+      _renderIncomingDoc(ch.doc.id, d, contactId, area);
       scrollToBottom();
-
-      // Update contact preview in chat list for instant reflection
-      const cPreview = window.state.contacts.find(x => x.id === contactId);
-      if(cPreview){
-        cPreview.last = d.text || (d.mediaType === 'image' ? 'Image' : d.mediaType === 'voice' ? 'Voice note' : '');
-        cPreview.time = d.time || '';
-        if(msg.sender === 'them' && window.state?.activeContact?.id === contactId){
-          // Chat is open — clear unread
-          cPreview.unread = 0;
-        } else if(msg.sender === 'them'){
-          cPreview.unread = (cPreview.unread || 0) + 1;
-        }
-        renderContacts(window.state.contacts);
-      }
-
-      // Show "Typing..." in header when "them" sends a message
-      if(msg.sender==='them'){
-        _showTypingHeader();
-      }
     });
   }, e => console.error('onSnapshot ERROR (check Firestore rules or network):', e));
+}
+
+// ── Shared message render helper — used by both getDocs pre-fetch and live onSnapshot ──
+function _renderIncomingDoc(docId, d, contactId, area){
+  // Already rendered?
+  if(area.querySelector(`[data-fbid="${docId}"]`)) return;
+  // Wrong chat open?
+  if(window.state?.activeContact?.id !== contactId) return;
+
+  // Skip expired messages
+  if(d.expiresAt){
+    const expMs = d.expiresAt.toMillis ? d.expiresAt.toMillis() : (d.expiresAt.seconds*1000);
+    if(expMs < Date.now()) return;
+  }
+
+  const myUid     = window.state?.user?.uid;
+  const sender    = (d.sender === myUid) ? 'me' : 'them';
+  const contact   = window.state.activeContact;
+  const msg       = { id: docId, text: d.text, sender, time: d.time || '',
+                      mediaUrl: d.mediaUrl||null, mediaType: d.mediaType||null };
+
+  const div = document.createElement('div');
+  div.className = `bubble-row ${sender}`;
+  div.setAttribute('data-fbid', docId);
+
+  const tickSvg = sender==='me' ? `
+    <span class="tick tick-sent" data-msgid="${docId}">
+      <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
+        <path class="tick-first"  d="M1 5l3 3 5-7" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path class="tick-second" d="M5 5l3 3 5-7" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0;transition:opacity .3s"/>
+      </svg>
+    </span>` : '';
+
+  div.innerHTML = `
+    ${sender==='them'
+      ? `<div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;background:${avatarColor(d.senderName||contact.name)};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">${(d.senderName||contact.name).trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>`
+      : ''}
+    <div class="bubble ${sender}">
+      ${contact.isGroup && sender==='them' && d.senderName
+        ? `<div style="font-size:11px;font-weight:700;color:${avatarColor(d.senderName)};margin-bottom:3px;">${escHtml(d.senderName)}</div>`
+        : ''}
+      ${msg.mediaType==='image' && msg.mediaUrl
+        ? `<img src="${msg.mediaUrl}" style="width:100%;max-width:210px;border-radius:14px 14px ${sender==='me'?'4px':'14px'} 14px;display:block;cursor:pointer;" onclick="window.open('${msg.mediaUrl}','_blank')"/>`
+        : msg.mediaType==='voice' && msg.mediaUrl
+        ? `<div style="display:flex;align-items:center;gap:8px;min-width:180px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg><audio controls src="${msg.mediaUrl}" style="flex:1;height:28px;accent-color:#60A5FA;"></audio></div>`
+        : escHtml(msg.text)}
+      <div class="bubble-time">${msg.time}${tickSvg}</div>
+    </div>`;
+
+  // Tick animation for own messages
+  if(sender==='me'){
+    setTimeout(()=>{
+      const tick2 = div.querySelector('.tick-second');
+      if(tick2) tick2.style.opacity='1';
+      setTimeout(()=>{
+        div.querySelectorAll('.tick-first,.tick-second').forEach(p=>p.setAttribute('stroke','#60A5FA'));
+      }, 2500);
+    }, 800);
+  }
+
+  // Long-press context menu
+  let _lpt;
+  div.addEventListener('pointerdown', ()=>{ _lpt=setTimeout(()=>openCtxMenu({preventDefault:()=>{},clientX:0,clientY:0},div),550); });
+  div.addEventListener('pointerup',   ()=>clearTimeout(_lpt));
+  div.addEventListener('pointerleave',()=>clearTimeout(_lpt));
+  div.addEventListener('contextmenu', ev=>{ ev.preventDefault(); openCtxMenu(ev,div); });
+  area.appendChild(div);
+
+  // Update contact list preview
+  const cPreview = window.state.contacts.find(x => x.id === contactId);
+  if(cPreview){
+    cPreview.last = d.text || (d.mediaType==='image' ? 'Image' : d.mediaType==='voice' ? 'Voice note' : '');
+    cPreview.time = d.time || '';
+    if(sender==='them' && window.state?.activeContact?.id === contactId){
+      cPreview.unread = 0;
+    } else if(sender==='them'){
+      cPreview.unread = (cPreview.unread || 0) + 1;
+    }
+    renderContacts(window.state.contacts);
+  }
+
+  if(sender==='them') _showTypingHeader();
 }
 
 // ── Typing indicator in chat header ─────────────────────────
@@ -3093,10 +3110,12 @@ window.sendMessage = window._fbSendMessage;
 
 // ── Load user's contacts from Firestore — REAL-TIME listener ──
 let _contactsUnsub = null;
+let _autoDeleteRanOnce = false; // only run startup cleanup once per session
 function loadFirestoreContacts(){
   const uid = window.state?.user?.uid;
   if(!uid) return;
   if(_contactsUnsub){ _contactsUnsub(); _contactsUnsub = null; }
+  _autoDeleteRanOnce = false;
   _contactsUnsub = onSnapshot(collection(db,'users',uid,'contacts'), snap => {
     const now = Date.now();
     const contacts = [];
@@ -3125,6 +3144,26 @@ function loadFirestoreContacts(){
     const totalUnread = contacts.reduce((s,c)=>s+(c.unread||0),0);
     const badge = document.getElementById('nav-badge');
     if(badge){ badge.textContent = totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : ''; badge.style.display = totalUnread > 0 ? 'flex' : 'none'; }
+
+    // ── Run auto-delete cleanup once after contacts are loaded ──
+    // This is the correct place — contacts are guaranteed to be populated here.
+    if(!_autoDeleteRanOnce && contacts.length > 0){
+      _autoDeleteRanOnce = true;
+      const myUid = window.state?.user?.uid;
+      if(myUid){
+        setTimeout(async () => {
+          for(const c of contacts.slice(0, 20)){
+            try{
+              const ids = [myUid, c.id].sort();
+              const path = c.isGroup
+                ? `groups/${c.id}/messages`
+                : `chats/room_${ids[0]}_${ids[1]}/messages`;
+              await _deleteExpiredMessages(path);
+            } catch(e){}
+          }
+        }, 1000); // 1s delay to let Firestore connection stabilise
+      }
+    }
   }, e => console.warn('loadFirestoreContacts error:', e));
 }
 
@@ -3153,19 +3192,6 @@ window.bootApp = async function(){
   await _origBoot();
   loadFirestoreContacts();
   await _loadUserSettings();
-  // FIX 4: On startup clean expired messages from all recent chats
-  setTimeout(async () => {
-    const contacts = window.state?.contacts || [];
-    const myUid = window.state?.user?.uid;
-    if(!myUid) return;
-    for(const c of contacts.slice(0,20)){
-      try{
-        const ids = [myUid, c.id].sort();
-        const path = c.isGroup ? `groups/${c.id}/messages` : `chats/room_${ids[0]}_${ids[1]}/messages`;
-        await _deleteExpiredMessages(path);
-      } catch(e){}
-    }
-  }, 3000);
   _writeMyPresence();
   const fab = document.getElementById('fab-new-chat');
   if(fab) fab.classList.add('visible');
@@ -3173,7 +3199,6 @@ window.bootApp = async function(){
   if(myUid){
     _listenForIncomingCalls(myUid);
     _listenForFriendRequests(myUid);
-    // Request push permission and start background notification listener
     _initPushNotifications(myUid);
   }
 };
