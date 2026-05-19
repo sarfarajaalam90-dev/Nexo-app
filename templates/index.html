@@ -530,7 +530,7 @@ svg{display:block}
   border:2px solid rgba(255,255,255,.3);background:#222;
   display:none;z-index:5;box-shadow:0 4px 16px rgba(0,0,0,.5);
 }
-#local-video-wrap video{ width:100%;height:100%;object-fit:cover; }
+#local-video-wrap video{ width:100%;height:100%;object-fit:cover;transform:scaleX(-1); }
 
 /* Caller info block */
 .call-info{
@@ -2802,7 +2802,8 @@ function startListener(contactId){
   unsub = onSnapshot(q, snap => {
     console.log('[Secret] onSnapshot fired —', snap.docChanges().length, 'change(s) on path:', chatPath);
     snap.docChanges().forEach(ch => {
-      if(ch.type !== 'added') return;
+      // Handle 'added' (new messages) AND 'modified' (server timestamp resolving from null)
+      if(ch.type !== 'added' && ch.type !== 'modified') return;
       const d = ch.doc.data();
       const myUid      = window.state?.user?.uid;
       const senderRole = (d.sender === myUid) ? 'me' : 'them';
@@ -2815,8 +2816,8 @@ function startListener(contactId){
       if(window.state?.activeContact?.id !== contactId) return;
 
       // Skip expired messages — don't render them, they'll be deleted by _deleteExpiredMessages
-      if(msg.expiresAt){
-        const expMs = msg.expiresAt.toMillis ? msg.expiresAt.toMillis() : (msg.expiresAt.seconds*1000);
+      if(d.expiresAt){
+        const expMs = d.expiresAt.toMillis ? d.expiresAt.toMillis() : (d.expiresAt.seconds*1000);
         if(expMs < Date.now()) return;
       }
       const contact = window.state.activeContact;
@@ -4213,8 +4214,8 @@ document.addEventListener('visibilitychange', () => {
   <!-- Remote video fills background during video calls -->
   <div id="remote-video-wrap"></div>
 
-  <!-- Local PiP video (top-right corner) -->
-  <div id="local-video-wrap"><video id="local-video" autoplay muted playsinline></video></div>
+  <!-- Local PiP video (top-right corner) — Agora injects its own <video> here -->
+  <div id="local-video-wrap"></div>
 
   <!-- Large profile avatar shown when no remote video -->
   <div id="call-avatar-center" style="position:relative;z-index:2;margin-top:80px;margin-bottom:0;">
