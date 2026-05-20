@@ -2,7 +2,7 @@
    sw.js — Secret App Service Worker  (FIXED — all push bugs)
    ════════════════════════════════════════════════════════════════ */
 
-const ORIGIN = 'https://secretapp-j41t.onrender.com';
+const ORIGIN = 'https://secretapp-e3jr.onrender.com';
 
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
