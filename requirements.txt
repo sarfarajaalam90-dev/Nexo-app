@@ -1,3 +1,4 @@
 flask
-gunicorn
 pywebpush
+firebase-admin
+gunicorn
