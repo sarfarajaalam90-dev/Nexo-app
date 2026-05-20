@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png"/>
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icon-512.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<!-- SW registered via /sw.js below -->
+<!-- SW registered via /sw.js -->
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Sora:wght@400;600;700&display=swap" rel="stylesheet"/>
 <style>
 /* ── Reset & Tokens ─────────────────────────────────────── */
@@ -3016,7 +3016,11 @@ window._fbSendMessage = async function(){
 
     // Push notification to recipient
     if(!isGroup){
-      sendPushNotification(contact.id, window.state.user.name || 'Secret', text, 'message').catch(()=>{});
+      // Don't push if recipient is the currently open chat AND page is visible
+      const alreadyViewing = (window.state?.activeContact?.id === contact.id) && document.visibilityState === 'visible';
+      if (!alreadyViewing) {
+        sendPushNotification(contact.id, window.state.user.name || 'Secret', text, 'message').catch(()=>{});
+      }
     }
 
     if(!isGroup){
