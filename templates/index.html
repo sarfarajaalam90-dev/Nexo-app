@@ -4357,25 +4357,22 @@ async function savePushSubscription(subscription) {
     }
     const subJson = subscription.toJSON();
 
-    // ── STEP 1: Save to Firestore (permanent — survives Render restarts) ──
+    // ── POST to Flask — Flask saves to Firestore AND caches in memory ──
+    // (Direct setDoc removed — db/setDoc not in scope from this script block)
     try {
-      await setDoc(doc(db, 'pushSubscriptions', uid), {
-        subscription: subJson,
-        updatedAt: serverTimestamp()
-      });
-      console.log('[Push] Subscription saved to Firestore for uid:', uid);
-    } catch (fsErr) {
-      console.warn('[Push] Firestore save failed:', fsErr);
-    }
-
-    // ── STEP 2: Also POST to Flask so current server instance has it cached ──
-    try {
-      await fetch('/api/push/subscribe', {
+      const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid, subscription: subJson })
       });
-    } catch (_) {}
+      if (res.ok) {
+        console.log('[Push] Subscription saved via server for uid:', uid);
+      } else {
+        console.warn('[Push] Server rejected subscription:', res.status);
+      }
+    } catch (fsErr) {
+      console.warn('[Push] Server save failed:', fsErr);
+    }
 
     window._pendingPushSubscription = null;
   } catch (err) {
