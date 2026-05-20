@@ -3155,19 +3155,32 @@ window.bootApp = async function(){
 async function _initPushNotifications(uid){
   try{
     // 0. Save push subscription now — uid is guaranteed here (called after login)
-    //    On first load the SW subscribe fires before login so uid was null.
-    //    We retry here so mobile and desktop users never miss their subscription.
+    //    setupPushNotifications runs at page load before login, so uid was null then.
+    //    We retry here for ALL devices (desktop + mobile) on every login.
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then(async reg => {
         try {
+          // Ensure uid is set before calling savePushSubscription
+          if (!window.state) window.state = {};
+          if (!window.state.user) window.state.user = {};
+          window.state.user.uid = uid;
+
+          // First try: use any pending subscription from page load
+          if (window._pendingPushSubscription) {
+            await savePushSubscription(window._pendingPushSubscription);
+            console.log('[Push] Flushed pending subscription for uid:', uid);
+            return;
+          }
+
+          // Second try: get current subscription from SW
           const sub = await reg.pushManager.getSubscription();
           if (sub) {
-            // Force-set uid into state so savePushSubscription picks it up
-            if (!window.state) window.state = {};
-            if (!window.state.user) window.state.user = {};
-            window.state.user.uid = uid;
             await savePushSubscription(sub);
             console.log('[Push] Subscription confirmed for uid:', uid);
+          } else {
+            // No subscription at all — run full setup (handles fresh mobile installs)
+            console.log('[Push] No subscription found — running full setup...');
+            await setupPushNotifications(reg);
           }
         } catch(e) { console.warn('[Push] Retry save failed:', e); }
       });
@@ -4339,13 +4352,23 @@ function urlBase64ToUint8Array(base64String) {
 async function savePushSubscription(subscription) {
   try {
     const uid = window.state?.user?.uid;
-    if (!uid) { console.warn('[Push] No uid yet — subscription not saved.'); return; }
-    await fetch('/api/push/subscribe', {
+    if (!uid) {
+      // uid not available yet — store and retry once user logs in
+      console.warn('[Push] No uid yet — will retry after login.');
+      window._pendingPushSubscription = subscription;
+      return;
+    }
+    const res = await fetch('/api/push/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ uid, subscription: subscription.toJSON() })
     });
-    console.log('[Push] Subscription saved for uid:', uid);
+    if (res.ok) {
+      console.log('[Push] Subscription saved for uid:', uid);
+      window._pendingPushSubscription = null; // clear pending
+    } else {
+      console.warn('[Push] Server rejected subscription:', res.status);
+    }
   } catch (err) {
     console.warn('[Push] Could not save subscription:', err);
   }
