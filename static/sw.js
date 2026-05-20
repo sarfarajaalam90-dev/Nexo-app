@@ -1,7 +1,9 @@
 /* ════════════════════════════════════════════════════════════════
    sw.js — Secret App Service Worker
-   Served at: https://yourdomain.com/sw.js  (root, same origin)
+   Served at: https://secretapp-j41t.onrender.com/sw.js
    ════════════════════════════════════════════════════════════════ */
+
+const ORIGIN = 'https://secretapp-j41t.onrender.com';
 
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
@@ -11,8 +13,8 @@ self.addEventListener('push', e => {
   let data = {
     title : 'Secret',
     body  : 'New message',
-    icon  : '/static/icon-192.png',
-    badge : '/static/icon-192.png',
+    icon  : ORIGIN + '/static/icon-192.png',
+    badge : ORIGIN + '/static/icon-192.png',
     tag   : 'secret-msg',
     type  : 'message'
   };
@@ -20,36 +22,50 @@ self.addEventListener('push', e => {
     try { Object.assign(data, e.data.json()); } catch (_) {}
   }
 
+  // Always use absolute URLs for icon/badge — required on Android/mobile Chrome
+  if (data.icon && !data.icon.startsWith('http')) data.icon = ORIGIN + data.icon;
+  if (data.badge && !data.badge.startsWith('http')) data.badge = ORIGIN + data.badge;
+
   e.waitUntil(
-    // Check if the app is open AND the user is already viewing that chat
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+
+      // If app is fully closed — list is empty — always show notification
+      if (list.length === 0) {
+        return showNotif(data);
+      }
+
+      // If any window is visible (foreground) — skip notification
+      // The live Firestore listener already shows the message in real time
       for (const c of list) {
-        // If the page is visible and focused, skip the notification
-        // (the in-page message listener already shows the message live)
         if (c.visibilityState === 'visible') {
-          console.log('[SW] App is in foreground — skipping notification');
-          return; // don't show notification when app is open and visible
+          console.log('[SW] App in foreground — skipping notification');
+          return;
         }
       }
-      // App is closed, minimized, or in background — show the notification
-      return self.registration.showNotification(data.title, {
-        body           : data.body,
-        icon           : data.icon  || '/static/icon-192.png',
-        badge          : data.badge || '/static/icon-192.png',
-        tag            : data.tag   || 'secret-msg',
-        renotify       : true,
-        requireInteraction: data.type === 'call', // keep call notifications on screen
-        data           : data,
-        actions        : data.type === 'call'
-          ? [
-              { action: 'answer',  title: '✅ Answer' },
-              { action: 'decline', title: '❌ Decline' }
-            ]
-          : [{ action: 'open', title: '💬 Open' }]
-      });
+
+      // App exists but is minimized/backgrounded — show notification
+      return showNotif(data);
     })
   );
 });
+
+function showNotif(data) {
+  return self.registration.showNotification(data.title, {
+    body              : data.body,
+    icon              : data.icon,
+    badge             : data.badge,
+    tag               : data.tag  || 'secret-msg',
+    renotify          : true,
+    requireInteraction: data.type === 'call',
+    data              : data,
+    actions           : data.type === 'call'
+      ? [
+          { action: 'answer',  title: '✅ Answer' },
+          { action: 'decline', title: '❌ Decline' }
+        ]
+      : [{ action: 'open', title: '💬 Open' }]
+  });
+}
 
 /* ── Notification click ───────────────────────────────────────── */
 self.addEventListener('notificationclick', e => {
@@ -69,13 +85,12 @@ self.addEventListener('notificationclick', e => {
         }
       }
       if (action !== 'decline') {
-        return clients.openWindow(self.location.origin);
+        return clients.openWindow(ORIGIN);
       }
     })
   );
 });
 
-/* ── Background sync stub ─────────────────────────────────────── */
 self.addEventListener('sync', e => {
   if (e.tag === 'send-queued-messages') {}
 });
