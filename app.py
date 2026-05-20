@@ -3,13 +3,10 @@ from datetime import datetime
 from pywebpush import webpush, WebPushException
 import os, json
 
-# ── Firebase Admin (reads pushSubscriptions from Firestore) ──────────────────
+# ── Firebase Admin ────────────────────────────────────────────────────────────
 import firebase_admin
 from firebase_admin import credentials, firestore as fb_firestore
 
-# The service account JSON can be supplied two ways:
-#   1. Set GOOGLE_APPLICATION_CREDENTIALS env var to the file path (local dev)
-#   2. Set FIREBASE_SERVICE_ACCOUNT env var to the raw JSON string (Render)
 _fb_initialized = False
 _fs_client = None
 
@@ -22,7 +19,6 @@ def _init_firebase():
         if sa_json:
             cred = credentials.Certificate(json.loads(sa_json))
         else:
-            # Local dev: place the JSON file next to app.py
             key_path = os.path.join(os.path.dirname(__file__),
                                     "nexo-app-b9ec4-firebase-adminsdk-fbsvc-4f17bf7bb7.json")
             cred = credentials.Certificate(key_path)
@@ -43,12 +39,12 @@ VAPID_PRIVATE_KEY  = os.environ.get("VAPID_PRIVATE_KEY",  "qgIPEeJdGTTevefFs1NRI
 VAPID_PUBLIC_KEY   = os.environ.get("VAPID_PUBLIC_KEY",   "BIayh8Hp_-6TosLl50O5xGmK1F7mP6RAmdul3m22nEwCWd3tL5Rm1BRWp_Oq-fzafRIvo2gr-lFokY2TFuQjWlw")
 VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "sarfarajaalam90@gmail.com")
 
-# ── In-memory cache (fast path — avoids Firestore read on every push) ─────────
+# ── In-memory cache ───────────────────────────────────────────────────────────
 _sub_cache: dict = {}
 
 
-def _get_subscription(uid: str) -> dict | None:
-    """Return subscription dict for uid. Checks cache first, then Firestore."""
+def _get_subscription(uid: str):
+    """Cache first, then Firestore fallback."""
     if uid in _sub_cache:
         return _sub_cache[uid]
     if _fs_client:
@@ -63,8 +59,6 @@ def _get_subscription(uid: str) -> dict | None:
             print(f"[Firebase] Firestore read failed for uid={uid}: {e}")
     return None
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/manifest.json')
 def manifest():
@@ -85,7 +79,7 @@ def service_worker():
 def index():
     return render_template("index.html")
 
-# ── Save subscription (called by frontend as a warm-cache step) ───────────────
+# ── Save subscription ─────────────────────────────────────────────────────────
 @app.route("/api/push/subscribe", methods=["POST"])
 def push_subscribe():
     body = request.get_json(silent=True) or {}
@@ -93,8 +87,23 @@ def push_subscribe():
     sub  = body.get("subscription")
     if not uid or not sub:
         return jsonify({"ok": False, "error": "Missing uid or subscription"}), 400
-    _sub_cache[uid] = sub          # cache it for this server instance
-    print(f"[Push] Subscription cached for uid={uid}")
+
+    # 1. Cache in memory
+    _sub_cache[uid] = sub
+
+    # 2. Persist to Firestore so it survives restarts
+    if _fs_client:
+        try:
+            _fs_client.collection("pushSubscriptions").document(uid).set({
+                "subscription": sub,
+                "updatedAt": fb_firestore.SERVER_TIMESTAMP
+            })
+            print(f"[Push] ✅ Subscription saved to Firestore for uid={uid}")
+        except Exception as e:
+            print(f"[Push] ⚠️ Firestore save failed for uid={uid}: {e}")
+    else:
+        print(f"[Push] ⚠️ Firebase not ready — subscription only cached for uid={uid}")
+
     return jsonify({"ok": True})
 
 # ── Send push notification ────────────────────────────────────────────────────
@@ -110,7 +119,6 @@ def push_send():
     if not recipient_uid:
         return jsonify({"ok": False, "error": "Missing recipientUid"}), 400
 
-    # Look up subscription — cache first, then Firestore fallback
     sub = _get_subscription(recipient_uid)
     if not sub:
         print(f"[Push] No subscription found for uid={recipient_uid}")
@@ -139,7 +147,6 @@ def push_send():
     except WebPushException as ex:
         print(f"[Push] ❌ WebPushException uid={recipient_uid}: {ex}")
         if ex.response and ex.response.status_code == 410:
-            # Subscription expired — remove from cache and Firestore
             _sub_cache.pop(recipient_uid, None)
             if _fs_client:
                 try:
@@ -164,7 +171,8 @@ def send_message():
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "app": "Secret",
-                    "firebase": _fb_initialized, "cached_subs": len(_sub_cache)})
+                    "firebase": _fb_initialized,
+                    "cached_subs": len(_sub_cache)})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
