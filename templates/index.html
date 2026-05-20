@@ -3015,12 +3015,11 @@ window._fbSendMessage = async function(){
     console.log('sendMessage: Firestore write OK, docId:', ref.id);
 
     // Push notification to recipient
+    // FIX 2: Always send push to recipient — we cannot know if the recipient's
+    // page is visible from the sender's side. The SW and recipient's page JS
+    // already suppresses the banner if they have the app open and visible.
     if(!isGroup){
-      // Don't push if recipient is the currently open chat AND page is visible
-      const alreadyViewing = (window.state?.activeContact?.id === contact.id) && document.visibilityState === 'visible';
-      if (!alreadyViewing) {
-        sendPushNotification(contact.id, window.state.user.name || 'Secret', text, 'message').catch(()=>{});
-      }
+      sendPushNotification(contact.id, window.state.user.name || 'Secret', text, 'message').catch(()=>{});
     }
 
     if(!isGroup){
@@ -3154,36 +3153,35 @@ window.bootApp = async function(){
 // ── Push / Background notification setup ─────────────────────
 async function _initPushNotifications(uid){
   try{
-    // 0. Save push subscription now — uid is guaranteed here (called after login)
-    //    setupPushNotifications runs at page load before login, so uid was null then.
-    //    We retry here for ALL devices (desktop + mobile) on every login.
+    // FIX 3: Use await (not .then) so subscription is always saved before we
+    // continue. Also re-POST on every login — Render restarts wipe in-memory
+    // subscriptions, so we must re-register every session.
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then(async reg => {
-        try {
-          // Ensure uid is set before calling savePushSubscription
-          if (!window.state) window.state = {};
-          if (!window.state.user) window.state.user = {};
-          window.state.user.uid = uid;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        // Ensure state is initialised
+        if (!window.state) window.state = {};
+        if (!window.state.user) window.state.user = {};
+        window.state.user.uid = uid;
 
-          // First try: use any pending subscription from page load
-          if (window._pendingPushSubscription) {
-            await savePushSubscription(window._pendingPushSubscription);
-            console.log('[Push] Flushed pending subscription for uid:', uid);
-            return;
-          }
+        // Use pending sub from page load, or fetch current one from SW
+        let sub = window._pendingPushSubscription || await reg.pushManager.getSubscription();
 
-          // Second try: get current subscription from SW
-          const sub = await reg.pushManager.getSubscription();
-          if (sub) {
-            await savePushSubscription(sub);
-            console.log('[Push] Subscription confirmed for uid:', uid);
-          } else {
-            // No subscription at all — run full setup (handles fresh mobile installs)
-            console.log('[Push] No subscription found — running full setup...');
-            await setupPushNotifications(reg);
-          }
-        } catch(e) { console.warn('[Push] Retry save failed:', e); }
-      });
+        if (!sub) {
+          // No subscription at all — do full setup (permission prompt + subscribe)
+          console.log('[Push] No subscription — running full setup...');
+          await setupPushNotifications(reg);
+          sub = await reg.pushManager.getSubscription();
+        }
+
+        if (sub) {
+          // Always POST to server — Render may have restarted and lost the old one
+          await savePushSubscription(sub);
+          window._swReg = reg; // keep _swReg fresh
+          console.log('[Push] Subscription (re-)saved for uid:', uid);
+        }
+        window._pendingPushSubscription = null;
+      } catch(e) { console.warn('[Push] Subscription save failed:', e); }
     }
     // 1. Ask permission (only prompts user once; subsequent calls are instant)
     if('Notification' in window && Notification.permission === 'default'){
@@ -4490,6 +4488,11 @@ if ('serviceWorker' in navigator) {
       // This fixes mobile users and returning visitors where updatefound never fires.
       const activeReg = await navigator.serviceWorker.ready;
       console.log('[SW] Active and ready');
+
+      // FIX 1: Store registration globally so _showPushNotification can use
+      // reg.showNotification() — the ONLY method that works on mobile
+      // when the page is backgrounded or the screen is off.
+      window._swReg = activeReg;
 
       // Now set up push notifications
       await setupPushNotifications(activeReg);
