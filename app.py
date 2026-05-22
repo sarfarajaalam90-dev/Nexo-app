@@ -55,16 +55,12 @@ CORS(app, origins=["https://nexo-app-b9ec4.web.app", "https://nexo-app-b9ec4.fir
 #
 VAPID_PRIVATE_KEY = os.environ.get(
     "VAPID_PRIVATE_KEY",
-    # PEM-encoded EC private key (converted from your original raw base64url key)
-    "-----BEGIN EC PRIVATE KEY-----\n"
-    "MDECAQEEIKoCDxHiXRk03r3nxbNTUSCdWmWaZYLDEZw8AWc9aTknoAoGCCqGSM49\n"
-    "AwEH\n"
-    "-----END EC PRIVATE KEY-----"
+    "q7ntriVfr7zJZDu_j1YNrAqorPXLtyrsJoMQEyTxUuQ"
 )
 
 VAPID_PUBLIC_KEY   = os.environ.get(
     "VAPID_PUBLIC_KEY",
-    "BIayh8Hp_-6TosLl50O5xGmK1F7mP6RAmdul3m22nEwCWd3tL5Rm1BRWp_Oq-fzafRIvo2gr-lFokY2TFuQjWlw"
+    "BOf-GEfWHk5DCyKNyjfD0WqPqW-tyzZwmk1duN-pZ-dfLFxGcpWziCveWRqgldcfnUDS_NGAuiflAXn2lHHNpT0"
 )
 VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "sarfarajaalam90@gmail.com")
 
