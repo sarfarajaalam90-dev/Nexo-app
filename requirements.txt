@@ -2,3 +2,4 @@ flask
 pywebpush
 firebase-admin
 gunicorn
+flask-cors
